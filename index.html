@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Work Management</title>
+
+<style>
+/* ---------------- LOGIN PAGE DESIGN ---------------- */
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  text-align: center;
+  background: #f2f2f2;
+}
+
+.container { margin-top: 80px; }
+.logo { width: 90px; height: 90px; border-radius: 10px; }
+.title { font-size: 26px; margin-top: 20px; font-weight: bold; }
+
+.inputBox {
+  width: 85%;
+  margin: 15px auto;
+  background: white;
+  border-radius: 8px;
+  padding: 12px;
+  border: 1px solid #ccc;
+  font-size: 18px;
+}
+
+.checkboxRow {
+  width: 85%;
+  margin: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 5px;
+  font-size: 14px;
+}
+
+.btn {
+  width: 85%;
+  margin: 12px auto;
+  padding: 15px;
+  background: #c6ff00;
+  font-size: 20px;
+  font-weight: bold;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+}
+
+.card {background: rgba(0,0,0,0.05); border-radius:15px; padding:20px; margin:10px 0;}
+
+/* ---------------- COMMENT BOTTOM SHEET (INSTAGRAM STYLE) ---------------- */
+.comment-box {
+  position: fixed;
+  bottom: -250px;
+  left: 0;
+  width: 100%;
+  background: #fff;
+  padding: 15px;
+  box-shadow: 0 -4px 15px #0003;
+  transition: 0.3s;
+  z-index: 9999;
+  border-radius: 10px 10px 0 0;
+}
+
+.comment-box input {
+  width: 80%;
+  padding: 12px;
+  font-size: 16px;
+  border: 1px solid #ccc;
+  border-radius: 40px;
+}
+
+.comment-send {
+  padding: 12px 18px;
+  background: #00b4ff;
+  border: none;
+  color: white;
+  border-radius: 40px;
+  font-weight: bold;
+}
+
+.comment-close {
+  font-size: 22px;
+  float: right;
+  margin-top: -5px;
+  cursor: pointer;
+}
+</style>
+</head>
+
+<body>
+
+<!-- LOGIN PAGE -->
+<div class="container" id="loginPage">
+  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8c/Aditya_Birla_Group_logo.svg/512px-Aditya_Birla_Group_logo.svg.png" class="logo">
+  <div class="title">Renusagar - TTMDC</div>
+
+  <input id="loginUser" type="text" class="inputBox" placeholder="USERNAME">
+  <input id="loginPin" type="password" class="inputBox" placeholder="Password">
+
+  <div class="checkboxRow">
+    <input type="checkbox" id="rememberUser">
+    <label for="rememberUser">Remember username</label>
+  </div>
+
+  <button class="btn" onclick="login()">Sign In</button>
+  <p id="loginMsg"></p>
+</div>
+
+<!-- ADMIN DASHBOARD -->
+<div class="dashboard" id="adminPanel" style="display:none">
+  <h2>Admin Dashboard</h2>
+  <button class="btn" onclick="logout()">Logout</button>
+  <button class="btn" onclick="downloadExcel()">Download Excel</button>
+  <div id="adminWorks"></div>
+</div>
+
+<!-- MEMBER DASHBOARD -->
+<div class="dashboard" id="memberPanel" style="display:none">
+  <h2>My Work</h2>
+  <button class="btn" onclick="openPopup()">Add Work</button>
+  <button class="btn" onclick="logout()">Logout</button>
+  <button class="btn" onclick="downloadMemberExcel()">Download My Excel</button>
+  <div id="memberWorks"></div>
+</div>
+
+<!-- COMMENT INSTAGRAM STYLE BOX -->
+<div id="commentBox" class="comment-box">
+  <span class="comment-close" onclick="closeCommentBox()">×</span>
+  <input type="text" id="commentInput" placeholder="Write a comment...">
+  <button class="comment-send" onclick="sendComment()">Send</button>
+</div>
+
+<!-- POPUP -->
+<div class="popup-bg" id="popupBg" style="display:none">
+  <div class="popup">
+    <span class="close-btn" onclick="closePopup()">BACK</span>
+    <h3>Add Work</h3>
+
+    <input id="w_title" placeholder="Work Title *">
+    <input id="w_start" type="time" placeholder="Start Time *">
+    <input id="w_end" type="time" placeholder="End Time *">
+    <textarea id="w_desc" placeholder="Description (optional)"></textarea>
+    <input id="w_loc" placeholder="Location">
+    <input id="w_priority" placeholder="Priority">
+    <input id="w_sup" placeholder="Supervisor">
+    <textarea id="w_notes" placeholder="Notes"></textarea>
+
+    <button class="btn" onclick="submitWork()">Submit</button>
+  </div>
+</div>
+
+<!-- FIREBASE -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<script>
+// FIREBASE
+const firebaseConfig = {
+  apiKey: "AIzaSyArNykP_TEoMvYoQQKXoYbB2BXXGr3UmRM",
+  authDomain: "ttmdc-4bdc4.firebaseapp.com",
+  databaseURL: "https://ttmdc-4bdc4-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "ttmdc-4bdc4",
+  storageBucket: "ttmdc-4bdc4.appspot.com",
+  messagingSenderId: "143771334130",
+  appId: "1:143771334130:web:dbe6a4df3bb99de968a76"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+let CURRENT = null;
+let ACTIVE_COMMENT_ID = null;
+
+// LOGIN
+function login() {
+  const u = loginUser.value.trim();
+  const p = loginPin.value.trim();
+
+  db.ref("users/" + u).get().then(snapshot => {
+    if (!snapshot.exists()) { loginMsg.innerText="User not found"; return; }
+
+    const data = snapshot.val();
+    if (data.pin !== p) { loginMsg.innerText="Wrong PIN"; return; }
+
+    CURRENT = u;
+
+    loginPage.style.display="none";
+
+    if (data.role === "admin") {
+      adminPanel.style.display = "block";
+      loadAdminWorks();
+    } else {
+      memberPanel.style.display = "block";
+      loadMemberWorks();
+    }
+  });
+}
+
+// COMMENT BOX FUNCTIONS
+function openCommentBox(id) {
+  ACTIVE_COMMENT_ID = id;
+  document.getElementById("commentBox").style.bottom = "0px";
+  setTimeout(() => document.getElementById("commentInput").focus(), 200);
+}
+
+function closeCommentBox() {
+  document.getElementById("commentBox").style.bottom = "-300px";
+}
+
+function sendComment() {
+  const txt = document.getElementById("commentInput").value.trim();
+  if (!txt) return;
+
+  db.ref("works/" + ACTIVE_COMMENT_ID).update({
+    comment: txt
+  });
+
+  document.getElementById("commentInput").value = "";
+  closeCommentBox();
+}
+
+// LOAD ADMIN WORKS
+function loadAdminWorks() {
+  db.ref("works").on("value", snap => {
+    const data = snap.val() || {};
+    let html = "";
+
+    Object.keys(data).forEach(id => {
+      const w = data[id];
+
+      html += `
+        <div class='card'>
+          <b>${w.username}</b><br>
+          <b>${w.title}</b><br>
+          ${w.start} - ${w.end}<br>
+          ${w.date}<br>
+          ${w.location}<br>
+
+          <b>Status:</b> ${w.status}<br>
+          <b>Comment:</b> ${w.comment || "No comment"}<br><br>
+
+          <button onclick="verifyWork('${id}', 'verified')">Verify</button>
+          <button onclick="verifyWork('${id}', 'rejected')">Reject</button>
+  
+          <br><br>
+          <img src="https://cdn-icons-png.flaticon.com/512/1380/1380338.png"
+               width="30" style="cursor:pointer"
+               onclick="openCommentBox('${id}')">
+        </div>`;
+    });
+
+    adminWorks.innerHTML = html;
+  });
+}
+
+// VERIFY STATUS
+function verifyWork(id, status) {
+  db.ref("works/" + id).update({ status });
+}
+
+// LOAD MEMBER WORKS
+function loadMemberWorks() {
+  db.ref("works").on("value", snap => {
+    const data = snap.val() || {};
+    let html = "";
+
+    Object.keys(data).forEach(id => {
+      const w = data[id];
+      if (w.username === CURRENT) {
+        html += `
+          <div class='card'>
+            <b>${w.title}</b><br>
+            ${w.start}-${w.end}<br>
+            ${w.date}<br>
+            ${w.location}<br>
+            <b>Status:</b> ${w.status}<br>
+            <b>Admin Comment:</b> ${w.comment || "No comment"}
+          </div>`;
+      }
+    });
+
+    memberWorks.innerHTML = html;
+  });
+}
+
+// SUBMIT WORK
+function submitWork() {
+  const title=w_title.value.trim();
+  const s=w_start.value;
+  const e=w_end.value;
+
+  const newKey = db.ref("works").push().key;
+
+  db.ref("works/"+newKey).set({
+    username: CURRENT,
+    title, start:s, end:e,
+    desc:w_desc.value,
+    location:w_loc.value,
+    priority:w_priority.value,
+    supervisor:w_sup.value,
+    notes:w_notes.value,
+    date: new Date().toISOString().slice(0,10),
+    status:"pending",
+    comment:""
+  });
+
+  closePopup();
+}
+
+// POPUP FUNCTIONS
+function openPopup(){ popupBg.style.display="flex"; }
+function closePopup(){ popupBg.style.display="none"; }
+
+// LOGOUT
+function logout(){
+  CURRENT=null;
+  memberPanel.style.display="none";
+  adminPanel.style.display="none";
+  loginPage.style.display="block";
+}
+
+/* ---------------- EXCEL DOWNLOAD (ADDED ONLY THIS PART) ---------------- */
+
+function downloadExcel() {
+  db.ref("works").once("value", snap => {
+    const data = snap.val() || {};
+
+    let csv = "Member Name,Work Title,Start Time,End Time,Date,Location\n";
+
+    Object.keys(data).forEach(id => {
+      const w = data[id];
+      csv += `${w.username},${w.title},${w.start},${w.end},${w.date},${w.location}\n`;
+    });
+
+    triggerCSV(csv, "All_Work_Data.csv");
+  });
+}
+
+function downloadMemberExcel() {
+  db.ref("works").once("value", snap => {
+    const data = snap.val() || {};
+
+    let csv = "Member Name,Work Title,Start Time,End Time,Date,Location\n";
+
+    Object.keys(data).forEach(id => {
+      const w = data[id];
+      if (w.username === CURRENT) {
+        csv += `${w.username},${w.title},${w.start},${w.end},${w.date},${w.location}\n`;
+      }
+    });
+
+    triggerCSV(csv, CURRENT + "_Work_Data.csv");
+  });
+}
+
+function triggerCSV(csv, filename) {
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+</script>
+</body>
+</html>
